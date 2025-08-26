@@ -1,0 +1,312 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  avatar          String?
+  timezone        String   @default("UTC")
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+  subscriptionId  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  goals           Goal[]
+  schedules       Schedule[]
+  chatThreads     ChatThread[]
+  teamMemberships TeamMember[]
+  aiLogs          AILog[]
+  calendarEvents  CalendarEvent[]
+
+  @@map("users")
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  type            SubscriptionType @default(FREE)
+  status          SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId String?
+  stripePriceId   String?
+  lifetimeAccess  Boolean  @default(false)
+  currentPeriodEnd DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  users           User[]
+
+  @@map("subscriptions")
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  category    GoalCategory
+  priority    Priority @default(MEDIUM)
+  status      GoalStatus @default(ACTIVE)
+  targetDate  DateTime?
+  progress    Float    @default(0)
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestones  Milestone[]
+  tasks       Task[]
+  chatThreads ChatThread[]
+
+  @@map("goals")
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  completed   Boolean  @default(false)
+  goalId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@map("milestones")
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  priority    Priority   @default(MEDIUM)
+  status      TaskStatus @default(PENDING)
+  dueDate     DateTime?
+  estimatedDuration Int?  // in minutes
+  actualDuration   Int?  // in minutes
+  goalId      String?
+  scheduleId  String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  goal        Goal?      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  schedule    Schedule?  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+model Schedule {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  isAllDay    Boolean  @default(false)
+  priority    Priority @default(MEDIUM)
+  status      ScheduleStatus @default(SCHEDULED)
+  location    String?
+  userId      String
+  teamId      String?
+  threadId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team        Team?    @relation(fields: [teamId], references: [id])
+  tasks       Task[]
+  thread      ChatThread? @relation(fields: [threadId], references: [id])
+
+  @@map("schedules")
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members     TeamMember[]
+  schedules   Schedule[]
+  chatThreads ChatThread[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  role     TeamRole @default(MEMBER)
+  userId   String
+  teamId   String
+  joinedAt DateTime @default(now())
+
+  // Relations
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+model ChatThread {
+  id          String       @id @default(cuid())
+  title       String
+  type        ChatType     @default(PERSONAL)
+  userId      String
+  teamId      String?
+  scheduleId  String?
+  goalId      String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team        Team?        @relation(fields: [teamId], references: [id])
+  goal        Goal?        @relation(fields: [goalId], references: [id])
+  messages    ChatMessage[]
+  schedules   Schedule[]
+
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id        String        @id @default(cuid())
+  content   String
+  role      MessageRole   @default(USER)
+  threadId  String
+  createdAt DateTime      @default(now())
+
+  // Relations
+  thread    ChatThread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
+
+model CalendarEvent {
+  id              String   @id @default(cuid())
+  externalId      String?  // Google Calendar event ID
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  isAllDay        Boolean  @default(false)
+  location        String?
+  timezone        String   @default("UTC")
+  userId          String
+  lastSyncedAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("calendar_events")
+}
+
+model AILog {
+  id          String   @id @default(cuid())
+  userId      String
+  input       String
+  output      String?
+  model       String   @default("gpt-3.5-turbo")
+  tokensUsed  Int?
+  responseTime Int?    // in milliseconds
+  error       String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_logs")
+}
+
+// Enums
+enum SubscriptionType {
+  FREE
+  PREMIUM
+  PRO
+  LIFETIME
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PENDING
+}
+
+enum GoalCategory {
+  CAREER
+  HEALTH
+  PERSONAL
+  FINANCIAL
+  EDUCATION
+  RELATIONSHIPS
+  OTHER
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ScheduleStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ChatType {
+  PERSONAL
+  TEAM
+  GOAL
+  SCHEDULE
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
